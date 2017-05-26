@@ -19,12 +19,13 @@ mxnet_option(USE_MKL_EXPERIMENTAL "Use experimental MKL (if MKL enabled and foun
 mxnet_option(USE_JEMALLOC         "Build with Jemalloc support"   OFF)
 mxnet_option(USE_PROFILER         "Build with Profiler support"   OFF)
 mxnet_option(USE_DIST_KVSTORE     "Build with DIST_KVSTORE support" OFF)
-mxnet_option(USE_PLUGINS_WARPCTC	"Use WARPCTC Plugins" OFF)
+mxnet_option(USE_PLUGINS_WARPCTC  "Use WARPCTC Plugins" OFF)
 mxnet_option(USE_PLUGIN_CAFFE     "Use Caffe Plugin" OFF)
 mxnet_option(USE_CPP_PACKAGE      "Build C++ Package" OFF)
 mxnet_option(USE_MXNET_LIB_NAMING "Use MXNet library naming conventions." ON)
 mxnet_option(USE_GPROF            "Compile with gprof (profiling) flag" OFF)
 mxnet_option(USE_VTUNE            "Enable use of Intel Amplifier XE (VTune)" OFF) # one could set VTUNE_ROOT for search path
+mxnet_option(INSTALL_EXAMPLES     "Install the example source files." OFF)
 
 SET(EXTRA_OPERATORS "" CACHE PATH "EXTRA OPERATORS PATH")
 
@@ -372,35 +373,30 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
 endif()
 
+set(MXNET_INSTALL_TARGETS mxnet)
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" AND USE_MXNET_LIB_NAMING)
   add_library(mxnet MODULE ${SOURCE})
 else()
   if(UNIX)
+    list(APPEND MXNET_INSTALL_TARGETS mxnet_static)
     add_library(mxnet_static STATIC ${SOURCE})
     # Need an arbitrary source file to trigger CMake to build the library
     add_library(mxnet SHARED)
-    # This has prolems, as it adds libmxnet_static to INTERFACE_LINK_LIBRARIES
-    target_link_libraries(mxnet "-Wl,--whole-archive $<TARGET_FILE:mxnet_static> -Wl,--no-whole-archive")
-    target_link_libraries(mxnet mxnet_static) # Let cmake understand the dependency
-    add_custom_target(
-        StaticallyLinkStaticMXNetLibrary ALL
-        BYPRODUCTS ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/libmxnet.a
-        WORKING_DIRECTORY ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}
-        COMMAND ln -sf libmxnet_static.a libmxnet.a
-        DEPENDS mxnet_static
-    )
+    set_target_properties(mxnet_static PROPERTIES OUTPUT_NAME mxnet)
+    target_link_libraries(mxnet PRIVATE "-Wl,--whole-archive $<TARGET_FILE:mxnet_static> -Wl,--no-whole-archive")
+    target_link_libraries(mxnet PRIVATE mxnet_static) # Let cmake understand the dependency
   else()
     add_library(mxnet SHARED ${SOURCE})
   endif()
 endif()
-target_link_libraries(mxnet ${mxnet_LINKER_LIBS})
+target_link_libraries(mxnet PUBLIC ${mxnet_LINKER_LIBS})
 
 if(USE_PLUGINS_WARPCTC)
-  target_link_libraries(mxnet debug ${WARPCTC_LIB_DEBUG})
-  target_link_libraries(mxnet optimized ${WARPCTC_LIB_RELEASE})
+  target_link_libraries(mxnet PUBLIC debug ${WARPCTC_LIB_DEBUG})
+  target_link_libraries(mxnet PUBLIC optimized ${WARPCTC_LIB_RELEASE})
 endif()
 
-target_link_libraries(mxnet dmlc)
+target_link_libraries(mxnet PUBLIC dmlc)
 
 if(MSVC AND USE_MXNET_LIB_NAMING)
   set_target_properties(mxnet PROPERTIES OUTPUT_NAME "libmxnet")
@@ -411,13 +407,13 @@ if(USE_DIST_KVSTORE)
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/ps-lite/CMakeLists.txt)
     add_subdirectory("ps-lite")
     list(APPEND pslite_LINKER_LIBS pslite)
-    target_link_libraries(mxnet debug ${pslite_LINKER_LIBS_DEBUG})
-    target_link_libraries(mxnet optimized ${pslite_LINKER_LIBS_RELEASE})
+    target_link_libraries(mxnet PUBLIC debug ${pslite_LINKER_LIBS_DEBUG})
+    target_link_libraries(mxnet PUBLIC optimized ${pslite_LINKER_LIBS_RELEASE})
   else()
     set(pslite_LINKER_LIBS protobuf zmq-static )
   endif()
   add_definitions(-DMXNET_USE_DIST_KVSTORE)
-  target_link_libraries(mxnet ${pslite_LINKER_LIBS})
+  target_link_libraries(mxnet PUBLIC ${pslite_LINKER_LIBS})
   include_directories(SYSTEM ${pslite_INCLUDE_DIR})
 endif()
 
@@ -428,19 +424,16 @@ endif()
 # Do tests after chrpath so that we use the "real" cuda driver
 add_subdirectory(tests)
 
-# AUTO_INSTALL_DIR -> Optional: specify post-build install direcory
-if(AUTO_INSTALL_DIR)
-  # ---[ Install Includes
-  add_custom_command(TARGET mxnet POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${PROJECT_SOURCE_DIR}/include ${AUTO_INSTALL_DIR}/include
-    )
+include(GNUInstallDirs)
+install(TARGETS ${MXNET_INSTALL_TARGETS}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 
-  # ---[ Install Examples
-  add_custom_command(TARGET mxnet POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${PROJECT_SOURCE_DIR}/example ${AUTO_INSTALL_DIR}/example
-    )
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+if (INSTALL_EXAMPLES)
+  install(DIRECTORY example  DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 endif()
 
 if(INSTALL_PYTHON_VERSIONS)
