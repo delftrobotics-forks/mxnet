@@ -18,7 +18,6 @@ libinfo_py = os.path.join(CURRENT_DIR, 'mxnet/libinfo.py')
 libinfo = {'__file__': libinfo_py}
 exec(compile(open(libinfo_py, "rb").read(), libinfo_py, 'exec'), libinfo, libinfo)
 
-LIB_PATH = libinfo['find_lib_path']()
 __version__ = libinfo['__version__']
 
 
@@ -73,6 +72,5 @@ setup(name='mxnet',
           'mxnet', 'mxnet.module', 'mxnet._ctypes', 'mxnet.rnn',
           'mxnet._cy2', 'mxnet._cy3', 'mxnet.notebook', 'mxnet.contrib'
           ],
-      data_files=[('mxnet', [LIB_PATH[0]])],
       url='https://github.com/dmlc/mxnet',
       ext_modules=config_cython())

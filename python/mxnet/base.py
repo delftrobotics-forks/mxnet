@@ -40,8 +40,10 @@ class MXNetError(Exception):
 
 def _load_lib():
     """Load libary by searching possible path."""
-    lib_path = libinfo.find_lib_path()
-    lib = ctypes.CDLL(lib_path[0], ctypes.RTLD_GLOBAL)
+    try:
+        lib = ctypes.CDLL("mxnet", ctypes.RTLD_GLOBAL)
+    except OSError:
+        lib = ctypes.CDLL("libmxnet.so", ctypes.RTLD_GLOBAL)
     # DMatrix functions
     lib.MXGetLastError.restype = ctypes.c_char_p
     return lib
